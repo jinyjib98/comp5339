@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from pathlib import Path
 import time
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -229,45 +230,81 @@ class DataRetriever:
         print('\n=== Task 2: Retrieving CER Renewable Energy Data ===')
         
         # Define the exact 5 files we want with their direct URLs
-        target_files = [
-            {
-                'url': 'https://cer.gov.au/document/total-lgcs-rec-registry-0',
-                'filename': 'Total_LGCs_in_the_REC_Registry.csv'
-            },
-            {
-                'url': 'https://cer.gov.au/document/power-stations-and-projects-probable',
-                'filename': 'Power_stations_and_projects_probable.csv'
-            },
-            {
-                'url': 'https://cer.gov.au/document/power-stations-and-projects-committed',
-                'filename': 'Power_stations_and_projects_committed.csv'
-            },
-            {
-                'url': 'https://cer.gov.au/document/power-stations-and-projects-accredited',
-                'filename': 'Power_stations_and_projects_accredited.csv'
-            },
-            {
-                'url': 'https://cer.gov.au/document/total-lgcs-and-capacity-accredited-power-stations-2025',
-                'filename': 'Total_LGCs_and_capacity_of_accredited_power_stations_in_2025.csv'
-            }
-        ]
+        # target_files = [
+        #     {
+        #         'url': 'https://cer.gov.au/document/total-lgcs-rec-registry-0',
+        #         'filename': 'Total_LGCs_in_the_REC_Registry.csv'
+        #     },
+        #     {
+        #         'url': 'https://cer.gov.au/document/power-stations-and-projects-probable',
+        #         'filename': 'Power_stations_and_projects_probable.csv'
+        #     },
+        #     {
+        #         'url': 'https://cer.gov.au/document/power-stations-and-projects-committed',
+        #         'filename': 'Power_stations_and_projects_committed.csv'
+        #     },
+        #     {
+        #         'url': 'https://cer.gov.au/document/power-stations-and-projects-accredited',
+        #         'filename': 'Power_stations_and_projects_accredited.csv'
+        #     },
+        #     {
+        #         'url': 'https://cer.gov.au/document/total-lgcs-and-capacity-accredited-power-stations-2025',
+        #         'filename': 'Total_LGCs_and_capacity_of_accredited_power_stations_in_2025.csv'
+        #     }
+        # ]
         
+        # downloaded_files = []
+        
+        # for i, target in enumerate(target_files, 1):
+        #     print(f"\nDownloading {i}/5: {target['filename']}")
+            
+        #     filepath = self.download_file_http(
+        #         target['url'], 
+        #         target['filename'], 
+        #         'cer_renewable'
+        #     )
+            
+        #     if filepath:
+        #         downloaded_files.append(filepath)
+            
+        #     # Wait for 1 second to avoid overloading the server
+        #     time.sleep(1)
+        url = 'https://cer.gov.au/markets/reports-and-data/large-scale-renewable-energy-data'
+
+        response = requests.get(url, stream = True)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Find all CSV download links from body
         downloaded_files = []
+        file_links = []
+
+        div_tags = soup.find_all('div', class_ = 'cer-accordion__body__item')
+        for div in div_tags:
+            file_tags = div.find_all('a', class_ = 'cer-button button--secondary')
+            for file in file_tags:
+                href = file.get('href', '')
+                text = file.get_text(strip = True).lower()
+
+                if 'csv' in text:
+                    file_links.append(href)
         
-        for i, target in enumerate(target_files, 1):
-            print(f"\nDownloading {i}/5: {target['filename']}")
-            
-            filepath = self.download_file_http(
-                target['url'], 
-                target['filename'], 
-                'cer_renewable'
-            )
-            
+        print(file_links)
+        
+        for i, href in enumerate(file_links, 1):
+            full_url = f'https://cer.gov.au{href}'
+            filename = full_url.split('/')[-1] + '.csv'
+
+            print(f'Downloading {i}/5: {filename}')
+            filepath = self.download_file_http(full_url, filename, 'cer_renewable')
+
             if filepath:
                 downloaded_files.append(filepath)
-            
+            else:
+                print(f'Failed to download {filename}')
+
             # Wait for 1 second to avoid overloading the server
             time.sleep(1)
+
         
         print(f"\nSuccessfully downloaded {len(downloaded_files)}/5 CER files")
         return downloaded_files
@@ -381,7 +418,8 @@ class DataRetriever:
     
 def main():
     retriever = DataRetriever()
-    retriever.run_script()
+    retriever.retrieve_cer_renewable_data()
+    # retriever.run_script()
 
 if __name__ == '__main__':
     main()
